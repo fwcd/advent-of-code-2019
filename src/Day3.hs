@@ -21,8 +21,7 @@ manhattanDistance (Vec x y) = (abs x) + (abs y)
 
 -- Turns a list of direction vectors into a path.
 lineSegsOf :: [Vec] -> [LineSeg]
-lineSegsOf = reverse . foldl (\l d -> let (LineSeg _ v) = last l
-                                          in (LineSeg v $ v + d) : l) [LineSeg (Vec 0 0) (Vec 0 0)]
+lineSegsOf = reverse . foldl (\l d -> let (LineSeg _ v) = head l in (LineSeg v $ v + d) : l) [LineSeg (Vec 0 0) (Vec 0 0)]
 
 -- Tests whether a value is between the given bounds.
 isBetween :: Ord a => a -> a -> a -> Bool
@@ -35,7 +34,7 @@ orthoIntersection1 l1 l2 = if (isBetween x1 x1' x2) && (isBetween y2 y2' y1) the
           (LineSeg (Vec x2 y2) (Vec x2' y2')) = l2
 
 orthoIntersection2 :: LineSeg -> LineSeg -> Maybe Vec
-orthoIntersection2 l1 l2 = if (isBetween y1 y1' y2) && (isBetween x2 x2' x1) then Just $ Vec y2 x1
+orthoIntersection2 l1 l2 = if (isBetween y1 y1' y2) && (isBetween x2 x2' x1) then Just $ Vec x1 y2
                                                                              else Nothing
     where (LineSeg (Vec x1 y1) (Vec x1' y1')) = l1
           (LineSeg (Vec x2 y2) (Vec x2' y2')) = l2
@@ -50,8 +49,12 @@ intersection l1 l2 | x1 == x1' && x2 /= x2' = orthoIntersection2 l1 l2
     where (LineSeg (Vec x1 y1) (Vec x1' y1')) = l1
           (LineSeg (Vec x2 y2) (Vec x2' y2')) = l2
 
+-- Tests whether two axis-aligned line segments are orthogonal to each other.
 areOrthogonal :: LineSeg -> LineSeg -> Bool
-areOrthogonal l1 l2 = (x1 == x1' && x2 /= x2') || (x2 == x2' && x1 /= x1') || (y1 == y1' && y2 /= y2') || (y2 == y2' && y1 /= y1')
+areOrthogonal l1 l2 = (x1 == x1' && x2 /= x2')
+                   || (x2 == x2' && x1 /= x1')
+                   || (y1 == y1' && y2 /= y2')
+                   || (y2 == y2' && y1 /= y1')
     where (LineSeg (Vec x1 y1) (Vec x1' y1')) = l1
           (LineSeg (Vec x2 y2) (Vec x2' y2')) = l2
 
@@ -95,5 +98,5 @@ parsePath = map parseSegment . split ','
 
 -- Computes the solution to the problem.
 solution :: String -> String -> Int
-solution p1 p2 = manhattanDistance $ minimum $ filter ((> 0) . manhattanDistance) $ intersections (pf p1) (pf p2)
+solution p1 p2 = minimum $ filter (> 0) $  manhattanDistance <$> intersections (pf p1) (pf p2)
     where pf = lineSegsOf . parsePath
