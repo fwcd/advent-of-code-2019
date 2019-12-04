@@ -19,9 +19,13 @@ instance Ord Vec where
 manhattanDistance :: Vec -> Int
 manhattanDistance (Vec x y) = (abs x) + (abs y)
 
+-- Computes the manhattan distance length of a line.
+manhattanLength :: LineSeg -> Int
+manhattanLength (LineSeg s e) = manhattanDistance (e - s)
+
 -- Turns a list of direction vectors into a path.
 lineSegsOf :: [Vec] -> [LineSeg]
-lineSegsOf = reverse . foldl (\l d -> let (LineSeg _ v) = head l in (LineSeg v $ v + d) : l) [LineSeg (Vec 0 0) (Vec 0 0)]
+lineSegsOf = tail . reverse . foldl (\l d -> let (LineSeg _ v) = head l in (LineSeg v $ v + d) : l) [LineSeg (Vec 0 0) (Vec 0 0)]
 
 -- Tests whether a value is between the given bounds.
 isBetween :: Ord a => a -> a -> a -> Bool
@@ -96,7 +100,28 @@ parseSegment (dd:nn) = (Vec n n) * d
 parsePath :: String -> [Vec]
 parsePath = map parseSegment . split ','
 
--- Computes the solution to the problem.
-solution :: String -> String -> Int
-solution p1 p2 = minimum $ filter (> 0) $  manhattanDistance <$> intersections (pf p1) (pf p2)
+-- Computes the solution to the problem (part 1).
+solution1 :: String -> String -> Int
+solution1 rp1 rp2 = minimum $ filter (> 0) $ manhattanDistance <$> intersections (pf rp1) (pf rp2)
     where pf = lineSegsOf . parsePath
+
+-- Part 2.
+
+-- Computes the number of steps needed to reach the given position.
+wireStepsTo :: Vec -> [LineSeg] -> Maybe Int
+wireStepsTo _ [] = Nothing
+wireStepsTo (Vec x y) p | sx == ex && ex == x && isBetween sy ey y = Just $ abs $ y - sy
+                        | sy == ey && ey == y && isBetween sx ex x = Just $ abs $ x - sx
+                        | otherwise = (manhattanLength l +) <$> wireStepsTo (Vec x y) ls
+    where (l@(LineSeg (Vec sx sy) (Vec ex ey)):ls) = p
+
+-- Computes the solution to the problem (part 2).
+solution2 :: String -> String -> Int
+solution2 rp1 rp2 = minimum $ filter (> 0) $ do
+    i <- intersections p1 p2
+    w1 <- maybeToList $ wireStepsTo i p1
+    w2 <- maybeToList $ wireStepsTo i p2
+    [w1 + w2]
+    where pf = lineSegsOf . parsePath
+          p1 = pf rp1
+          p2 = pf rp2
