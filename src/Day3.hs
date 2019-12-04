@@ -21,12 +21,12 @@ manhattanDistance (Vec2 x y) = (abs x) + (abs y)
 -- Finds all points on the given direction vector.
 pointsOn :: Vec2 -> [Vec2]
 pointsOn (Vec2 dx dy) = [Vec2 x y |
-    x <- if dx == 0 then [0] else [0,(signum dx)..dx],
-    y <- if dy == 0 then [0] else [0,(signum dy)..dy]]
+    x <- if dx == 0 then [0] else [dx,(dx - signum dx)..(signum dx)],
+    y <- if dy == 0 then [0] else [dy,(dy - signum dy)..(signum dy)]]
 
 -- Turns a list of direction vectors into a path.
 pathPoints :: [Vec2] -> [Vec2]
-pathPoints = foldl (\l v -> l ++ (map ((last l) +) $ tail $ pointsOn $ v)) [Vec2 0 0]
+pathPoints = foldl (\l v -> (map ((head l) +) $ pointsOn $ v) ++ l) [Vec2 0 0]
 
 -- Computes the intersection of two lists.
 intersect :: Eq a => [a] -> [a] -> [a]
@@ -54,5 +54,5 @@ parsePath :: String -> [Vec2]
 parsePath = map parseSegment . split ','
 
 solution :: String -> String -> Int
-solution p1 p2 = manhattanDistance $ minimum $ tail $ intersect (pf p1) (pf p2)
+solution p1 p2 = manhattanDistance $ minimum $ filter ((> 0) . manhattanDistance) $ intersect (pf p1) (pf p2)
     where pf = pathPoints . parsePath
