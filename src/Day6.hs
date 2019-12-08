@@ -4,7 +4,7 @@ import qualified Data.Map as M
 
 -- Part 1.
 
-data Orbit = Orbit String String
+data Orbit = Orbit String String deriving Show
 type OrbitCountMap = M.Map String Int
 
 -- Finds the number of direct and indirect orbits for each planet.
@@ -22,3 +22,18 @@ orbitCountSum :: [Orbit] -> Int
 orbitCountSum os = mapSum ds + mapSum is
     where mapSum = M.foldr (+) 0
           (ds, is) = orbitCounts os
+
+-- Splits a string around a character.
+splitOn :: Char -> String -> [String]
+splitOn _ "" = [""]
+splitOn sep (c:cs) = if c == sep then ("":(r:rs))
+                                 else ((c:r):rs)
+    where (r:rs) = splitOn sep cs
+
+-- Parses an orbit.
+parseOrbit :: String -> Orbit
+parseOrbit s = Orbit sx sy
+    where (sx:sy:_) = splitOn ')' s
+
+parseOrbits :: [String] -> [Orbit]
+parseOrbits = map parseOrbit
