@@ -14,23 +14,17 @@ buildOrbitMap = foldr insertOrbit M.empty
     where insertOrbit :: Orbit -> OrbitMap -> OrbitMap
           insertOrbit (Orbit x y) = M.insertWith (++) x [y]
 
--- Finds the number of direct and indirect orbits for each planet.
--- orbitCounts:: [Orbit] -> (OrbitCountMap, OrbitCountMap)
--- orbitCounts os = let (ds, as) = orbitCounts' M.empty M.empty os
---                   in (ds, M.insert "COM" 0 $ M.mapWithKey (\x y -> y - M.findWithDefault 0 x ds) as)
---     where orbitCounts' :: OrbitCountMap -> OrbitCountMap -> OrbitMap -> [Orbit] -> (OrbitCountMap, OrbitCountMap)
---           orbitCounts' ds as _ [] = (ds, as)
---           orbitCounts' ds as mos (Orbit x y:os) = orbitCounts' ds' as' mos' os
---             where 
---                   ds' = M.insertWith (+) y 1 ds
---                   as' = updateAs o as
---                   mos' = M.insertWith (++) x [y] mos
+-- The number of transitive orbits.
+indirectOrbitCount :: OrbitMap -> Int
+indirectOrbitCount = indirectOrbitCount' (-1) "COM"
+    where indirectOrbitCount' :: Int -> String -> OrbitMap -> Int
+          indirectOrbitCount' c x os = foldr (+) cc $ (flip (indirectOrbitCount' $ 1 + c) $ os) <$> ys
+            where cc = max c 0
+                  ys = M.findWithDefault [] x os
 
--- Computes the sum of direct and indirect orbit counts.
--- orbitCountSum :: [Orbit] -> Int
--- orbitCountSum os = mapSum ds + mapSum is
---     where mapSum = M.foldr (+) 0
---           (ds, is) = orbitCounts os
+-- The number of total (direct and indirect) orbits.
+orbitCount :: [Orbit] -> Int
+orbitCount os = (indirectOrbitCount . buildOrbitMap) os + length os
 
 -- Splits a string around a character.
 splitOn :: Char -> String -> [String]
