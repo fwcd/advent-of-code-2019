@@ -40,3 +40,10 @@ parseOrbit s = Orbit sx sy
 
 parseOrbits :: [String] -> [Orbit]
 parseOrbits = map parseOrbit
+
+-- Part 2.
+
+commonOrbitedPlanet :: String -> String -> OrbitMap -> String
+commonOrbitedPlanet = commonOrbitedPlanet' "COM"
+    where commonOrbitedPlanet' :: String -> String -> String -> [String] -> OrbitMap -> String
+          commonOrbitedPlanet' z x y os | z == x = 
