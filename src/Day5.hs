@@ -57,10 +57,10 @@ performOp o p m = case op of
                        4 -> (putStrLn $ show $ pval 0) >> pure ((+1), m)
                        
                        -- Jump-if-true
-                       5 -> pure (if (pval 0) /= 0 then const $ pval 0 else (+1), m)
+                       5 -> pure (if (pval 0) /= 0 then const $ pval 1 else (+2), m)
                        
                        -- Jump-if-false
-                       6 -> pure (if (pval 0) == 0 then const $ pval 0 else (+1), m)
+                       6 -> pure (if (pval 0) == 0 then const $ pval 1 else (+2), m)
 
                        -- Less-than
                        7 -> pure ((+3), replaceNth n (intOfBool $ (pval 0) < (pval 1)) m)
