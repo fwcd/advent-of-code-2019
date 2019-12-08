@@ -6,7 +6,7 @@ import Data.Vector.Unboxed.Mutable as VM
 -- aka. Intcode interpreter v2
 
 debugEnabled :: Bool
-debugEnabled = True
+debugEnabled = False
 
 type Memory = V.Vector Int
 type InstructionPointerUpdate = Int -> Int
@@ -64,11 +64,11 @@ performOp o p m = case op of
 
                        -- Less-than
                        7 -> pure ((+3), replaceNth n (intOfBool $ (pval 0) < (pval 1)) m)
-                          where n = pval 2
+                          where n = param 2
                        
                        -- Equals
                        8 -> pure ((+3), replaceNth n (intOfBool $ (pval 0) == (pval 1)) m)
-                          where n = pval 2
+                          where n = param 2
 
                        -- Unknown
                        n -> error $ "Invalid op " <> show n
