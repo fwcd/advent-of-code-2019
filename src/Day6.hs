@@ -1,4 +1,5 @@
 import qualified Data.Map as M
+import qualified Data.List as L
 
 -- Day 6: Universal Orbit Map
 
@@ -43,7 +44,17 @@ parseOrbits = map parseOrbit
 
 -- Part 2.
 
+partitionUnique :: Eq a => [a] -> ([a], [a])
+partitionUnique = partitionUnique' [] []
+    where partitionUnique' :: Eq a => [a] -> [a] -> [a] -> ([a], [a])
+          partitionUnique' us ds [] = (us, ds)
+          partitionUnique' us ds (x:xs) = if elem x us then partitionUnique' (L.delete x us) (x:ds) xs
+                                                       else partitionUnique' (x:us) ds xs
+
 commonOrbitedPlanet :: String -> String -> OrbitMap -> String
 commonOrbitedPlanet = commonOrbitedPlanet' "COM"
-    where commonOrbitedPlanet' :: String -> String -> String -> [String] -> OrbitMap -> String
-          commonOrbitedPlanet' z x y os | z == x = 
+    where commonOrbitedPlanet' :: String -> String -> String -> OrbitMap -> String
+          commonOrbitedPlanet' z x y | z == x = undefined
+          distanceDownwardsBetween :: String -> String -> OrbitMap -> Int
+          distanceDownwardsBetween x y om | x == y = 0
+                                          | otherwise = foldr (+) 0 $ (\x' -> distanceDownwardsBetween x' y om) <$> M.findWithDefault [] x om
