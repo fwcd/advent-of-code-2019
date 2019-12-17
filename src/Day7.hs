@@ -12,7 +12,7 @@ import qualified Data.Vector.Unboxed.Mutable as VUM
 
 type Memory = VU.Vector Int
 type InstructionPointerUpdate = Int -> Int
-data IntcodeMachine = IntcodeMachine { memory :: Memory, instPointer :: Int }
+data IntcodeMachine = IntcodeMachine { memory :: Memory, instPointer :: Int } deriving Show
 
 -- A parameter mode determines how an operation's parameter should be turned into a value.
 type ParameterMode = Int -> Memory -> Int
@@ -131,8 +131,8 @@ performNextOpsWith (i:is) = do
     (o, usedInput, continue) <- performNextOpWith $ Just i
     let is' = if usedInput then is
                            else i : is
-    if continue then performNextOpsWith is'
-                else return (o, False)
+    if continue && not (null is') then performNextOpsWith is'
+                                  else return (o, continue)
 
 -- Creates a new machine with the given program loaded.
 newMachine :: [Int] -> IntcodeMachine
@@ -165,28 +165,27 @@ maxThrusterSignal1 pro = L.maximum $ flip thrusterSignal1 pro <$> L.permutations
 
 -- Part 2.
 
-data Amp = Amp { machine :: IntcodeMachine, nextInputs :: [Int] }
+data Amp = Amp { machine :: IntcodeMachine, nextInputs :: [Int] } deriving Show
 
 -- Evaluates the thruster signal as a feedback loop of "amps".
 thrusterSignal2 :: [Int] -> [Int] -> Int
-thrusterSignal2 is pro = fst $ runState (thrusterSignal2' 0) $ V.fromList $ (\k -> Amp {
+thrusterSignal2 initialIs pro = fst $ runState (thrusterSignal2' 0) $ V.fromList $ (\k -> Amp {
         machine = newMachine pro,
         nextInputs = [k, 0]
-    }) <$> is
+    }) <$> initialIs
     where thrusterSignal2' :: Int -> State (V.Vector Amp) Int
-          thrusterSignal2' k = trace ("Now @ " <> show k <> " with is " <> show is) $ do
+          thrusterSignal2' k = do
               amps <- get
-
+              
               let len = V.length amps
                   k' = (k + 1) `mod` len
                   Amp { machine = mcn, nextInputs = is } = amps V.! k
+                  Amp { machine = nxMcn, nextInputs = nxIs } = amps V.! k'
                   ((o, continue), mcn') = runState (performNextOpsWith is) mcn
-                  out = expectJust ("Amp " <> show k <> " produced no output") o
-              modify $ replaceNthBoxed k  $ Amp { machine = mcn', nextInputs = [0] }
                 
-              let Amp { machine = nxMcn, nextInputs = nxIs } = amps V.! k'
-              modify $ replaceNthBoxed k' $ (amps V.! k') { nextInputs = init nxIs ++ [out] }
+              modify $ trace ("Now @ " <> show k <> " with is " <> (show $ nextInputs <$> amps) <> " and o " <> show o) $ replaceNthBoxed k $ Amp { machine = mcn', nextInputs = [0] }
+              modify $ replaceNthBoxed k' $ (amps V.! k') { nextInputs = init nxIs ++ maybeToList o }
 
               if k' >= len then if continue then thrusterSignal2' 0
-                                            else return out
+                                            else return $ expectJust ("Amp " <> show k <> " produced no output") o
                               else thrusterSignal2' k'
