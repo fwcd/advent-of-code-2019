@@ -97,3 +97,11 @@ interpretWith is = Prelude.reverse . fst . (interpret' 0 is []) . V.fromList
                                                                                                     in interpret' ip' is' os' m'
               where pp = V.drop ip m
 
+-- Part 1.
+
+-- Evaluates the thruster signal using the given phase setting sequence on the given program.
+thrusterSignal :: [Int] -> [Int] -> Int
+thrusterSignal = thrusterSignal' 0
+    where thrusterSignal' :: Int -> [Int] -> [Int] -> Int
+          thrusterSignal' i [] _ = i
+          thrusterSignal' i (p:ps) pro = thrusterSignal' (Prelude.head $ interpretWith [p, i] pro) ps pro
