@@ -1,7 +1,7 @@
 import Data.Maybe
-import Data.Vector
-import Data.Vector.Unboxed as V
-import Data.Vector.Unboxed.Mutable as VM
+import qualified Data.List as L
+import qualified Data.Vector.Unboxed as V
+import qualified Data.Vector.Unboxed.Mutable as VM
 
 -- Day 7: Amplification Circuit
 -- aka. Intcode interpreter v3
@@ -85,7 +85,7 @@ performOp o is p m = case op of
 
 -- Interprets a program written in Intcode with the given list of inputs, producing a list of outputs.
 interpretWith :: [Int] -> [Int] -> [Int]
-interpretWith is = Prelude.reverse . fst . (interpret' 0 is []) . V.fromList
+interpretWith is = reverse . fst . (interpret' 0 is []) . V.fromList
     where interpret' :: Int -> [Int] -> [Int] -> Memory -> ([Int], Memory)
           interpret' ip is os m = if V.null pp then pure m
                                                else let op = V.head pp
@@ -99,9 +99,13 @@ interpretWith is = Prelude.reverse . fst . (interpret' 0 is []) . V.fromList
 
 -- Part 1.
 
--- Evaluates the thruster signal using the given phase setting sequence on the given program.
+-- Evaluates the thruster signal using the given phase setting sequence on the given program/"amp configuration".
 thrusterSignal :: [Int] -> [Int] -> Int
 thrusterSignal = thrusterSignal' 0
     where thrusterSignal' :: Int -> [Int] -> [Int] -> Int
           thrusterSignal' i [] _ = i
-          thrusterSignal' i (p:ps) pro = thrusterSignal' (Prelude.head $ interpretWith [p, i] pro) ps pro
+          thrusterSignal' i (p:ps) pro = thrusterSignal' (head $ interpretWith [p, i] pro) ps pro
+
+-- Brute-forces the maximum thruster signal for a given program/"amp configuration".
+maxThrusterSignal :: [Int] -> Int
+maxThrusterSignal pro = L.maximum $ flip thrusterSignal pro <$> L.permutations [0..4]
