@@ -111,28 +111,34 @@ performNextOpWith i = do
     mcn <- get
     let ip = instPointer mcn
         m = memory mcn
-        pp = VU.drop ip m
-        
-    if VU.null pp then return (Nothing, False, False)
-                 else let op = VU.head pp
-                          p = VU.tail pp
-                          in if VU.head pp == 99 then return (Nothing, False, False)
-                                                else let (o, usedInput, ipUpdate, m') = performOp op i p m
-                                                         ip' = ipUpdate $ ip + 1
-                                                         in do
-                                                             put $ IntcodeMachine { memory = m', instPointer = ip' }
-                                                             return (o, usedInput, True)
+    
+    case nextInstruction mcn of
+        Just (op, p) | op /= 99 -> let (o, usedInput, ipUpdate, m') = performOp op i p m
+                                       ip' = ipUpdate $ ip + 1
+                                       in do
+                                           put $ IntcodeMachine { memory = m', instPointer = ip' }
+                                           return (o, usedInput, True)
+        _ -> return (Nothing, False, False)
+
+-- Fetches the next opcode and the subsequent memory cells.
+nextInstruction :: IntcodeMachine -> Maybe (Int, Memory)
+nextInstruction mcn | VU.null pp = Nothing
+                    | otherwise = Just (VU.head pp, VU.tail pp)
+    where pp = VU.drop (instPointer mcn) (memory mcn)
 
 -- Performs the next operations on the Intcode computer using the given input sequence.
--- The returned output is the output of the _last_ operation.
-performNextOpsWith :: [Int] -> State IntcodeMachine (Maybe Int, Bool)
-performNextOpsWith [] = return (Nothing, True)
-performNextOpsWith (i:is) = do
-    (o, usedInput, continue) <- performNextOpWith $ Just i
-    let is' = if usedInput then is
-                           else i : is
-    if continue && not (null is') then performNextOpsWith is'
-                                  else return (o, continue)
+-- Returns the outputs and whether the machine should continue.
+performNextOpsWith :: [Int] -> State IntcodeMachine ([Int], Bool)
+performNextOpsWith is = do
+    (o, usedInput, continue) <- performNextOpWith $ listToMaybe is
+    let is' = if usedInput then safeTail is
+                           else is
+    mcn <- get
+    let nextOpUsesInput = maybe False (== 3) $ fst <$> nextInstruction mcn
+
+    if continue && not (null is' && nextOpUsesInput) then do (o', continue') <- performNextOpsWith is'
+                                                             return (maybeToList o ++ o', continue')
+                                                     else return (maybeToList o, continue)
 
 -- Creates a new machine with the given program loaded.
 newMachine :: [Int] -> IntcodeMachine
@@ -181,11 +187,12 @@ thrusterSignal2 initialIs pro = fst $ runState (thrusterSignal2' 0) $ V.fromList
                   k' = (k + 1) `mod` len
                   Amp { machine = mcn, nextInputs = is } = amps V.! k
                   Amp { machine = nxMcn, nextInputs = nxIs } = amps V.! k'
-                  ((o, continue), mcn') = runState (performNextOpsWith is) mcn
+                  ((os, continue), mcn') = runState (performNextOpsWith is) mcn
                 
-              modify $ trace ("Now @ " <> show k <> " with is " <> (show $ nextInputs <$> amps) <> " and o " <> show o) $ replaceNthBoxed k $ Amp { machine = mcn', nextInputs = [0] }
-              modify $ replaceNthBoxed k' $ (amps V.! k') { nextInputs = init nxIs ++ maybeToList o }
+              modify $ trace ("Now @ " <> show k <> " with is " <> (show $ nextInputs <$> amps) <> " and os " <> show os <> ", continue: " <> show continue)
+                     $ replaceNthBoxed k $ Amp { machine = mcn', nextInputs = [0] }
+              modify $ replaceNthBoxed k' $ (amps V.! k') { nextInputs = init nxIs ++ os }
 
-              if k' >= len then if continue then thrusterSignal2' 0
-                                            else return $ expectJust ("Amp " <> show k <> " produced no output") o
+              if k >= len - 1 then if continue then thrusterSignal2' 0
+                                               else return $ expectJust ("Amp " <> show k <> " produced no output") $ listToMaybe os
                               else thrusterSignal2' k'
