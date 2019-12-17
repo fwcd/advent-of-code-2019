@@ -41,6 +41,10 @@ expectJust :: String -> Maybe a -> a
 expectJust _ (Just x) = x
 expectJust msg Nothing = error msg
 
+safeTail :: [a] -> [a]
+safeTail [] = []
+safeTail (x:xs) = xs
+
 -- Performs a single operation with automated inputs and outputs in Intcode.
 -- The first argument is the opcode, the second argument the input.
 performOp :: Int -> Maybe Int -> Memory -> Memory -> (Maybe Int, InstructionPointerUpdate, Memory)
@@ -54,11 +58,12 @@ performOp o i p m = case op of
                           where n = param 2
 
                        -- Input
-                       3 -> (expectJust "Missing input during op 3!" i, Nothing, (+1), replaceNth n i m)
+                       3 -> (Nothing, (+1), replaceNth n inp m)
                           where n = param 0
+                                inp = expectJust "Missing input during op 3!" i
 
                        -- Print
-                       4 -> (is, Just $ pval 0, (+1), m)
+                       4 -> (Just $ pval 0, (+1), m)
                        
                        -- Jump-if-true
                        5 -> noIO (if (pval 0) /= 0 then const $ pval 1 else (+2), m)
@@ -85,8 +90,8 @@ performOp o i p m = case op of
           pval 1 = mode1 (param 1) m
           pval 2 = mode2 (param 2) m
 
-          noIO :: (a, b) -> ([Int], Maybe c, a, b)
-          noIO (x, y) = (is, Nothing, x, y)
+          noIO :: (a, b) -> (Maybe c, a, b)
+          noIO (x, y) = (Nothing, x, y)
 
 -- Performs the next operation on the Intcode computer, possibly producing output and possibly halting.
 -- The resulting boolean determines whether the machine is "still running".
@@ -114,31 +119,25 @@ performNextOpWith i = do
 
 -- Interprets a program written in Intcode with the given list of inputs, producing a list of outputs.
 interpretWith :: [Int] -> [Int] -> [Int]
-interpretWith is = reverse . fst . (interpret' 0 is []) . V.fromList
+interpretWith is pro = fst $ runState (interpret' is) $ IntcodeMachine { memory = V.fromList pro, instPointer = 0 }
     where interpret' :: [Int] -> State IntcodeMachine [Int]
           interpret' is = do
-              -- TODO
-          -- interpret' ip is os m = if V.null pp then pure m
-          --                                      else let op = V.head pp
-          --                                               p = V.tail pp
-          --                                               in if V.null pp || V.head pp == 99 then (os, m)
-          --                                                                                  else let (is', o, ipUpdate, m') = performOp op is p m
-          --                                                                                           ip' = ipUpdate $ ip + 1
-          --                                                                                           os' = maybeToList o <> os
-          --                                                                                           in interpret' ip' is' os' m'
-          --     where pp = V.drop ip m
+              (o, continue) <- performNextOpWith $ listToMaybe is
+              if continue then do os <- interpret' $ safeTail is
+                                  return $ maybeToList o ++ os
+                          else return $ maybeToList o
 
 -- Part 1.
 
 -- Evaluates the thruster signal using the given phase setting sequence on the given program/"amp configuration".
 thrusterSignal1 :: [Int] -> [Int] -> Int
-thrusterSignal1 = thrusterSignal' 0
-    where thrusterSignal' :: Int -> [Int] -> [Int] -> Int
-          thrusterSignal' i [] _ = i
-          thrusterSignal' i (p:ps) pro = thrusterSignal' (head $ interpretWith [p, i] pro) ps pro
+thrusterSignal1 = thrusterSignal1' 0
+    where thrusterSignal1' :: Int -> [Int] -> [Int] -> Int
+          thrusterSignal1' i [] _ = i
+          thrusterSignal1' i (p:ps) pro = thrusterSignal1' (head $ interpretWith [p, i] pro) ps pro
 
 -- Brute-forces the maximum thruster signal for a given program/"amp configuration".
 maxThrusterSignal1 :: [Int] -> Int
-maxThrusterSignal1 pro = L.maximum $ flip thrusterSignal pro <$> L.permutations [0..4]
+maxThrusterSignal1 pro = L.maximum $ flip thrusterSignal1 pro <$> L.permutations [0..4]
 
 -- Part 2.
