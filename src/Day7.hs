@@ -53,7 +53,7 @@ safeTail (x:xs) = xs
 
 -- Performs a single operation with automated inputs and outputs in Intcode.
 -- The first argument is the opcode, the second argument the input.
-performOp :: Int -> Maybe Int -> Memory -> Memory -> (Maybe Int, InstructionPointerUpdate, Memory)
+performOp :: Int -> Maybe Int -> Memory -> Memory -> (Maybe Int, Bool, InstructionPointerUpdate, Memory)
 performOp o i p m = case op of
                        -- Add
                        1 -> noIO ((+3), replaceNth n ((pval 0) + (pval 1)) m)
@@ -64,12 +64,12 @@ performOp o i p m = case op of
                           where n = param 2
 
                        -- Input
-                       3 -> (Nothing, (+1), replaceNth n inp m)
+                       3 -> (Nothing, True, (+1), replaceNth n inp m)
                           where n = param 0
                                 inp = expectJust "Missing input during op 3!" i
 
                        -- Print
-                       4 -> (Just $ pval 0, (+1), m)
+                       4 -> (Just $ pval 0, False, (+1), m)
                        
                        -- Jump-if-true
                        5 -> noIO (if (pval 0) /= 0 then const $ pval 1 else (+2), m)
@@ -96,40 +96,57 @@ performOp o i p m = case op of
           pval 1 = mode1 (param 1) m
           pval 2 = mode2 (param 2) m
 
-          noIO :: (a, b) -> (Maybe c, a, b)
-          noIO (x, y) = (Nothing, x, y)
+          noIO :: (a, b) -> (Maybe c, Bool, a, b)
+          noIO (x, y) = (Nothing, False, x, y)
 
 -- Performs the next operation on the Intcode computer, possibly producing output and possibly halting.
 -- The resulting boolean determines whether the machine is "still running".
 performNextOp :: State IntcodeMachine (Maybe Int, Bool)
-performNextOp = performNextOpWith Nothing
+performNextOp = (\(o, c, _) -> (o, c)) <$> performNextOpWith Nothing
 
 -- Performs the next operation on the Intcode computer with the given input, possibly producing output and possibly halting.
--- The resulting boolean determines whether the machine is "still running".
-performNextOpWith :: Maybe Int -> State IntcodeMachine (Maybe Int, Bool)
+-- The resulting boolean determines whether the machine is "still running" and whether the input was used.
+performNextOpWith :: Maybe Int -> State IntcodeMachine (Maybe Int, Bool, Bool)
 performNextOpWith i = do
     mcn <- get
     let ip = instPointer mcn
         m = memory mcn
         pp = VU.drop ip m
         
-    if VU.null pp then return (Nothing, False)
+    if VU.null pp then return (Nothing, False, False)
                  else let op = VU.head pp
                           p = VU.tail pp
-                          in if VU.head pp == 99 then return (Nothing, False)
-                                                else let (o, ipUpdate, m') = performOp op i p m
+                          in if VU.head pp == 99 then return (Nothing, False, False)
+                                                else let (o, usedInput, ipUpdate, m') = performOp op i p m
                                                          ip' = ipUpdate $ ip + 1
                                                          in do
                                                              put $ IntcodeMachine { memory = m', instPointer = ip' }
-                                                             return (o, True)
+                                                             return (o, usedInput, True)
+
+-- Performs the next operations on the Intcode computer using the given input sequence.
+-- The returned output is the output of the _last_ operation.
+performNextOpsWith :: [Int] -> State IntcodeMachine (Maybe Int, Bool)
+performNextOpsWith [] = return (Nothing, True)
+performNextOpsWith (i:is) = do
+    (o, usedInput, continue) <- performNextOpWith $ Just i
+    let is' = if usedInput then is
+                           else i : is
+    if continue then performNextOpsWith is'
+                else return (o, False)
+
+-- Creates a new machine with the given program loaded.
+newMachine :: [Int] -> IntcodeMachine
+newMachine pro = IntcodeMachine { memory = VU.fromList pro, instPointer = 0 }
 
 -- Interprets a program written in Intcode with the given list of inputs, producing a list of outputs.
 interpretWith :: [Int] -> [Int] -> [Int]
-interpretWith is pro = fst $ runState (interpret' is) $ IntcodeMachine { memory = VU.fromList pro, instPointer = 0 }
+interpretWith is = fst . runState (interpret' is) . newMachine
     where interpret' :: [Int] -> State IntcodeMachine [Int]
           interpret' is = do
-              (o, continue) <- performNextOpWith $ listToMaybe is
-              if continue then do os <- interpret' $ safeTail is
+              (o, usedInput, continue) <- performNextOpWith $ listToMaybe is
+              let is' = if usedInput then safeTail is
+                                     else is
+              if continue then do os <- interpret' is'
                                   return $ maybeToList o ++ os
                           else return $ maybeToList o
 
@@ -148,20 +165,28 @@ maxThrusterSignal1 pro = L.maximum $ flip thrusterSignal1 pro <$> L.permutations
 
 -- Part 2.
 
+data Amp = Amp { machine :: IntcodeMachine, nextInputs :: [Int] }
 
 -- Evaluates the thruster signal as a feedback loop of "amps".
 thrusterSignal2 :: [Int] -> [Int] -> Int
-thrusterSignal2 is pro = fst $ runState (thrusterSignal2' 0 $ V.fromList is) $ V.replicate 5 $ IntcodeMachine { memory = VU.fromList pro, instPointer = 0 }
-    where thrusterSignal2' :: Int -> V.Vector Int -> State (V.Vector IntcodeMachine) Int
-          thrusterSignal2' k is = trace ("Now @ " <> show k <> " with is " <> show is) $ do
-              mcns <- get
+thrusterSignal2 is pro = fst $ runState (thrusterSignal2' 0) $ V.fromList $ (\k -> Amp {
+        machine = newMachine pro,
+        nextInputs = [k, 0]
+    }) <$> is
+    where thrusterSignal2' :: Int -> State (V.Vector Amp) Int
+          thrusterSignal2' k = trace ("Now @ " <> show k <> " with is " <> show is) $ do
+              amps <- get
 
-              let mcn = mcns V.! k
-                  ((o, continue), mcn') = runState (performNextOpWith $ Just $ is V.! k) mcn
+              let len = V.length amps
+                  k' = (k + 1) `mod` len
+                  Amp { machine = mcn, nextInputs = is } = amps V.! k
+                  ((o, continue), mcn') = runState (performNextOpsWith is) mcn
                   out = expectJust ("Amp " <> show k <> " produced no output") o
-                  is' = replaceNthBoxed k out is
-              modify $ replaceNthBoxed k mcn'
+              modify $ replaceNthBoxed k  $ Amp { machine = mcn', nextInputs = [0] }
+                
+              let Amp { machine = nxMcn, nextInputs = nxIs } = amps V.! k'
+              modify $ replaceNthBoxed k' $ (amps V.! k') { nextInputs = init nxIs ++ [out] }
 
-              if k >= (V.length mcns) - 1 then if continue then thrusterSignal2' 0 is'
-                                                           else return out
-                                          else thrusterSignal2' (k + 1) is'
+              if k' >= len then if continue then thrusterSignal2' 0
+                                            else return out
+                              else thrusterSignal2' k'
