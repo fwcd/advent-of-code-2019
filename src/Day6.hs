@@ -62,16 +62,16 @@ expectJust _ (Just x) = x
 expectJust msg Nothing = error msg
 
 stepMaybe :: String -> String -> OrbitMap -> Maybe (String, Int)
-stepMaybe x y om | x == y = Just ("", 0)
+stepMaybe x y om | x == y = Just ("", -1)
                  | otherwise = listToMaybe $ (>>= \x' -> maybeToList $ (\(_, d) -> (x', d + 1)) <$> stepMaybe x' y om) $ M.findWithDefault [] x om
 
 step :: String -> String -> OrbitMap -> (String, Int)
 step x y = expectJust ("No path from " <> x <> " to " <> y) . stepMaybe x y
 
-commonOrbitedPlanet :: String -> String -> OrbitMap -> String
-commonOrbitedPlanet = commonOrbitedPlanet' "COM"
-    where commonOrbitedPlanet' :: String -> String -> String -> OrbitMap -> String
-          commonOrbitedPlanet' z x y om | z /= x && z /= y && xp == yp = commonOrbitedPlanet' xp x y om
-                                        | otherwise = z
-            where (xp, _) = step z x om
-                  (yp, _) = step z y om
+orbitalTransfers :: String -> String -> OrbitMap -> Int
+orbitalTransfers = orbitalTransfers' "COM"
+    where orbitalTransfers' :: String -> String -> String -> OrbitMap -> Int
+          orbitalTransfers' z x y om | z /= x && z /= y && xp == yp = orbitalTransfers' xp x y om
+                                     | otherwise = xd + yd
+            where (xp, xd) = step z x om
+                  (yp, yd) = step z y om
