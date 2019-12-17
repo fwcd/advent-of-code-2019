@@ -189,10 +189,13 @@ thrusterSignal2 initialIs pro = fst $ runState (thrusterSignal2' 0) $ V.fromList
                   Amp { machine = nxMcn, nextInputs = nxIs } = amps V.! k'
                   ((os, continue), mcn') = runState (performNextOpsWith is) mcn
                 
-              modify $ trace ("Now @ " <> show k <> " with is " <> (show $ nextInputs <$> amps) <> " and os " <> show os <> ", continue: " <> show continue)
-                     $ replaceNthBoxed k $ Amp { machine = mcn', nextInputs = [0] }
+              modify $ replaceNthBoxed k $ Amp { machine = mcn', nextInputs = [0] }
               modify $ replaceNthBoxed k' $ (amps V.! k') { nextInputs = init nxIs ++ os }
 
               if k >= len - 1 then if continue then thrusterSignal2' 0
                                                else return $ expectJust ("Amp " <> show k <> " produced no output") $ listToMaybe os
                               else thrusterSignal2' k'
+
+-- Brute-forces the maximum thruster signal for the feedback-looping "amp configuration".
+maxThrusterSignal2 :: [Int] -> Int
+maxThrusterSignal2 pro = L.maximum $ flip thrusterSignal2 pro <$> L.permutations [5..9]
