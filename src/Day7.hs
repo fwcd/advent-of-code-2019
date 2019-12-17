@@ -1,13 +1,16 @@
 import Control.Monad.State
 import Data.Maybe
+import Debug.Trace
 import qualified Data.List as L
-import qualified Data.Vector.Unboxed as V
-import qualified Data.Vector.Unboxed.Mutable as VM
+import qualified Data.Vector as V
+import qualified Data.Vector.Mutable as VM
+import qualified Data.Vector.Unboxed as VU
+import qualified Data.Vector.Unboxed.Mutable as VUM
 
 -- Day 7: Amplification Circuit
 -- aka. Intcode interpreter v3
 
-type Memory = V.Vector Int
+type Memory = VU.Vector Int
 type InstructionPointerUpdate = Int -> Int
 data IntcodeMachine = IntcodeMachine { memory :: Memory, instPointer :: Int }
 
@@ -18,14 +21,17 @@ immediateMode :: ParameterMode
 immediateMode = const
 
 positionMode :: ParameterMode
-positionMode = flip (V.!)
+positionMode = flip (VU.!)
 
 modeOf :: Int -> ParameterMode
 modeOf 0 = positionMode
 modeOf 1 = immediateMode
 
-replaceNth :: V.Unbox a => Int -> a -> V.Vector a -> V.Vector a
-replaceNth n z = V.modify (\v -> VM.write v n z)
+replaceNth :: VU.Unbox a => Int -> a -> VU.Vector a -> VU.Vector a
+replaceNth n z = VU.modify $ \v -> VUM.write v n z
+
+replaceNthBoxed :: Int -> a -> V.Vector a -> V.Vector a
+replaceNthBoxed n z = V.modify $ \v -> VM.write v n z
 
 parseOp :: Int -> (ParameterMode, ParameterMode, ParameterMode, Int)
 parseOp o = (modeOf $ (o `div` 10000) `mod` 10,
@@ -84,7 +90,7 @@ performOp o i p m = case op of
     where (mode2, mode1, mode0, op) = parseOp o
 
           param :: Int -> Int
-          param = (p V.!)
+          param = (p VU.!)
           pval :: Int -> Int
           pval 0 = mode0 (param 0) m
           pval 1 = mode1 (param 1) m
@@ -105,12 +111,12 @@ performNextOpWith i = do
     mcn <- get
     let ip = instPointer mcn
         m = memory mcn
-        pp = V.drop ip m
+        pp = VU.drop ip m
         
-    if V.null pp then return (Nothing, False)
-                 else let op = V.head pp
-                          p = V.tail pp
-                          in if V.head pp == 99 then return (Nothing, False)
+    if VU.null pp then return (Nothing, False)
+                 else let op = VU.head pp
+                          p = VU.tail pp
+                          in if VU.head pp == 99 then return (Nothing, False)
                                                 else let (o, ipUpdate, m') = performOp op i p m
                                                          ip' = ipUpdate $ ip + 1
                                                          in do
@@ -119,7 +125,7 @@ performNextOpWith i = do
 
 -- Interprets a program written in Intcode with the given list of inputs, producing a list of outputs.
 interpretWith :: [Int] -> [Int] -> [Int]
-interpretWith is pro = fst $ runState (interpret' is) $ IntcodeMachine { memory = V.fromList pro, instPointer = 0 }
+interpretWith is pro = fst $ runState (interpret' is) $ IntcodeMachine { memory = VU.fromList pro, instPointer = 0 }
     where interpret' :: [Int] -> State IntcodeMachine [Int]
           interpret' is = do
               (o, continue) <- performNextOpWith $ listToMaybe is
@@ -141,3 +147,21 @@ maxThrusterSignal1 :: [Int] -> Int
 maxThrusterSignal1 pro = L.maximum $ flip thrusterSignal1 pro <$> L.permutations [0..4]
 
 -- Part 2.
+
+
+-- Evaluates the thruster signal as a feedback loop of "amps".
+thrusterSignal2 :: [Int] -> [Int] -> Int
+thrusterSignal2 is pro = fst $ runState (thrusterSignal2' 0 $ V.fromList is) $ V.replicate 5 $ IntcodeMachine { memory = VU.fromList pro, instPointer = 0 }
+    where thrusterSignal2' :: Int -> V.Vector Int -> State (V.Vector IntcodeMachine) Int
+          thrusterSignal2' k is = trace ("Now @ " <> show k <> " with is " <> show is) $ do
+              mcns <- get
+
+              let mcn = mcns V.! k
+                  ((o, continue), mcn') = runState (performNextOpWith $ Just $ is V.! k) mcn
+                  out = expectJust ("Amp " <> show k <> " produced no output") o
+                  is' = replaceNthBoxed k out is
+              modify $ replaceNthBoxed k mcn'
+
+              if k >= (V.length mcns) - 1 then if continue then thrusterSignal2' 0 is'
+                                                           else return out
+                                          else thrusterSignal2' (k + 1) is'
