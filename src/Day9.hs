@@ -113,7 +113,7 @@ performOp o i p = case op of
                        -- Jump-if-false
                        6 -> do
                            x <- pval 0
-                           y <- pval 2
+                           y <- pval 1
                            moveIP $ if x == 0 then const y else (+2)
                            return noIO
                        -- Less-than
