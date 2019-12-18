@@ -17,14 +17,19 @@ data IntcodeMachine = IntcodeMachine { memory :: Memory, instPtr :: Int, relativ
 -- A parameter mode determines how an operation's parameter should be turned into a value.
 type ParameterMode = Int -> Int -> Memory -> (Int, Int)
 
+(!) :: Memory -> Int -> Int
+m ! x | x < 0 = error $ "Memory addresses may not be negative: " <> show x
+      | x < VU.length m = m VU.! x
+      | otherwise = 0
+
 immediateMode :: ParameterMode
 immediateMode x r m = (x, x)
 
 positionMode :: ParameterMode
-positionMode x r m = (x, m VU.! x) 
+positionMode x r m = (x, m ! x) 
 
 relativeMode :: ParameterMode
-relativeMode x r m = (x + r, m VU.! x + r)
+relativeMode x r m = (x + r, m ! (x + r))
 
 modeOf :: Int -> ParameterMode
 modeOf 0 = positionMode
@@ -32,10 +37,18 @@ modeOf 1 = immediateMode
 modeOf 2 = relativeMode
 
 replaceNth :: VU.Unbox a => Int -> a -> VU.Vector a -> VU.Vector a
-replaceNth n z = VU.modify $ \v -> VUM.write v n z
+replaceNth n z = VU.modify $ \vm -> VUM.write vm n z
 
 replaceNthBoxed :: Int -> a -> V.Vector a -> V.Vector a
 replaceNthBoxed n z = V.modify $ \v -> VM.write v n z
+
+ignore :: Functor f => f a -> f ()
+ignore = fmap (\_ -> ())
+
+ensureSize :: Int -> Memory -> Memory
+ensureSize n m | n >= l = m VU.++ VU.replicate (n - l) 0
+               | otherwise = m
+    where l = VU.length m
 
 parseOp :: Int -> (ParameterMode, ParameterMode, ParameterMode, Int)
 parseOp o = (modeOf $ (o `div` 10000) `mod` 10,
@@ -135,7 +148,7 @@ performOp o i p = trace ("Performing op " <> show op <> " on " <> show p) $ case
           param :: Int -> State IntcodeMachine (Int, Int)
           param x = do
               mcn <- get
-              return $ mode x (p VU.! x) (relativeBase mcn) $ memory mcn
+              return $ mode x (p ! x) (relativeBase mcn) $ memory mcn
           pval :: Int -> State IntcodeMachine Int
           pval = (snd <$>) . param
           ppos :: Int -> State IntcodeMachine Int
@@ -146,7 +159,7 @@ performOp o i p = trace ("Performing op " <> show op <> " on " <> show p) $ case
           moveBase :: (Int -> Int) -> State IntcodeMachine ()
           moveBase f = modify $ \mcn -> mcn { relativeBase = f $ relativeBase mcn }
           memSet :: Int -> Int -> State IntcodeMachine ()
-          memSet n x = modify $ \mcn -> mcn { memory = replaceNth n x $ memory mcn }
+          memSet n x = modify $ \mcn -> mcn { memory = replaceNth n x $ ensureSize (n + 1) $ memory mcn }
 
 -- Performs the next operation on the Intcode computer, possibly producing output and possibly halting.
 -- The resulting boolean determines whether the machine is "still running".
