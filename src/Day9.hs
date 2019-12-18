@@ -74,7 +74,7 @@ safeTail (x:xs) = xs
 -- the third parameter the memory starting at the parameter.
 -- Returns the output and whether the input was used.
 performOp :: Int -> Maybe Int -> Memory -> State IntcodeMachine (Maybe Int, Bool)
-performOp o i p = trace ("Performing op " <> show op <> " on " <> show p) $ case op of
+performOp o i p = case op of
                        -- Add
                        1 -> do
                            x <- pval 0
@@ -135,7 +135,7 @@ performOp o i p = trace ("Performing op " <> show op <> " on " <> show p) $ case
                        -- Update relative base
                        9 -> do
                            x <- pval 0
-                           moveBase $ const x
+                           moveBase (+x)
                            moveIP (+1)
                            return noIO
                        -- Unknown
